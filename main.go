@@ -59,5 +59,5 @@ func transform(path string) error {
 }
 
 func main() {
-	transform("./test_files/error.go")
+	transform("./test_files/one_var.go")
 }
