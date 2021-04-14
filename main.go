@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/token"
+	"io/ioutil"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -15,7 +19,7 @@ func isErrorCodeName(name string) bool {
 	return matched
 }
 
-func transform(path string) error {
+func walk(path string) error {
 	logger := log.WithFields(log.Fields{"path": path})
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, path, nil, 0)
@@ -58,6 +62,41 @@ func transform(path string) error {
 	return nil
 }
 
+func inspect(path string) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+	if err != nil {
+		panic(err)
+	}
+	ast.Inspect(file, func(n ast.Node) bool {
+		spec, ok := n.(*ast.ValueSpec)
+		if ok {
+			for _, id := range spec.Names {
+				if isErrorCodeName(id.Name) {
+					value0 := id.Obj.Decl.(*ast.ValueSpec).Values[0]
+					switch value := value0.(type) {
+					case *ast.BasicLit:
+						fmt.Printf("code value: %s\n", value.Value)
+						value.Value = "\"hello\""
+						//codeValue = strings.Trim(value.Value, "\"")
+					}
+				}
+			}
+		}
+		return true
+	})
+
+	buf := new(bytes.Buffer)
+	err = format.Node(buf, fset, file)
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+	} else if path[len(path)-8:] != "_test.go" {
+		d, f := filepath.Split(path)
+		ioutil.WriteFile(filepath.Join(d, "result_"+f), buf.Bytes(), 0644)
+		//ioutil.WriteFile(path, buf.Bytes(), 0644)
+	}
+}
+
 func main() {
-	transform("./test_files/one_var.go")
+	inspect("./test_files/one_var.go")
 }
